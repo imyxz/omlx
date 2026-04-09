@@ -355,6 +355,20 @@ python build.py --dmg-only
 
 See [packaging/README.md](packaging/README.md) for details on the app bundle structure and layer configuration.
 
+### Release Packaging
+
+Use the helper script to package release artifacts:
+
+```bash
+# Python sdist + wheel only
+scripts/package_release.sh --python-only
+
+# Python sdist + wheel, then DMG on macOS
+scripts/package_release.sh
+```
+
+The script also prints SHA256 checksums for all generated artifacts.
+
 ## Contributing
 
 Contributions are welcome! See [Contributing Guide](docs/CONTRIBUTING.md) for details.
