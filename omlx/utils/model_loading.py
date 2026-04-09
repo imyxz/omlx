@@ -4,9 +4,88 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+_JANG_METHODS = {"jang", "jang2"}
+
+
+def prepare_model_for_loading(model_name: str) -> str:
+    """Apply compatibility shims before mlx-lm loads a model.
+
+    Currently adds a compatibility shim for JANG/JANG2-quantized local models:
+    if ``config.json`` contains ``quantization_config.quant_method`` as jang/jang2
+    but misses MLX's expected top-level ``quantization`` field, inject a
+    minimal equivalent ``quantization`` entry so mlx-lm can detect quantized
+    weights correctly.
+
+    Args:
+        model_name: Local model path or HF repo id.
+
+    Returns:
+        Path/id to pass to mlx-lm (currently unchanged).
+    """
+    model_path = Path(model_name)
+    if not model_path.is_dir():
+        return model_name
+
+    config_path = model_path / "config.json"
+    if not config_path.exists():
+        return model_name
+
+    try:
+        import json
+
+        with open(config_path, encoding="utf-8") as f:
+            config = json.load(f)
+    except Exception:
+        return model_name
+
+    if not isinstance(config, dict) or "quantization" in config:
+        return model_name
+
+    qconfig = config.get("quantization_config")
+    if not isinstance(qconfig, dict):
+        return model_name
+
+    method = str(qconfig.get("quant_method", "")).lower()
+    if method not in _JANG_METHODS:
+        return model_name
+
+    bits = qconfig.get("bits", qconfig.get("w_bit", qconfig.get("nbits", 4)))
+    group_size = qconfig.get("group_size", qconfig.get("q_group_size", 64))
+    mode = qconfig.get("mode", "affine")
+
+    try:
+        bits = int(bits)
+    except Exception:
+        bits = 4
+
+    try:
+        group_size = int(group_size)
+    except Exception:
+        group_size = 64
+
+    config["quantization"] = {
+        "bits": bits,
+        "group_size": group_size,
+        "mode": mode,
+    }
+
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+
+    logger.info(
+        "Applied JANG quantization compatibility shim: %s (bits=%s, group_size=%s)",
+        model_path,
+        bits,
+        group_size,
+    )
+    return model_name
 
 
 def load_text_model(
@@ -16,6 +95,7 @@ def load_text_model(
     """Load an LLM model/tokenizer pair via mlx-lm."""
     from mlx_lm import load
 
+    model_name = prepare_model_for_loading(model_name)
     return load(model_name, tokenizer_config=tokenizer_config)
 
 

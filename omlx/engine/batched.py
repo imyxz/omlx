@@ -188,10 +188,9 @@ class BatchedEngine(BaseEngine):
 
         import asyncio
 
-        from mlx_lm import load
-
         from ..engine_core import AsyncEngineCore, EngineConfig
         from ..scheduler import SchedulerConfig
+        from ..utils.model_loading import load_text_model
 
         # Build tokenizer config with model-specific fixes
         tokenizer_config = get_tokenizer_config(
@@ -204,7 +203,7 @@ class BatchedEngine(BaseEngine):
         from ..engine_core import get_mlx_executor
 
         def _load_model_sync():
-            return load(
+            return load_text_model(
                 self._model_name,
                 tokenizer_config=tokenizer_config,
             )
@@ -262,7 +261,7 @@ class BatchedEngine(BaseEngine):
             if specprefill_enabled and specprefill_draft:
                 try:
                     def _load_draft():
-                        draft_model, _ = load(specprefill_draft)
+                        draft_model, _ = load_text_model(specprefill_draft)
                         return draft_model
                     draft_model = await loop.run_in_executor(get_mlx_executor(), _load_draft)
                     self._engine.engine.scheduler.set_specprefill_draft_model(
